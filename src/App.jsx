@@ -1,376 +1,682 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Plus,
+  CheckCircle2,
+  Clock3,
+  AlertTriangle,
+  User,
+  Wrench,
+  Building2,
+  Camera,
+  Mic,
+  FileText,
+  Search,
+  ClipboardCheck,
+} from "lucide-react";
 
-export default function App() {
+/*
+  DULINI MAINTENANCE OPERATIONS
+  FULL SINGLE FILE VERSION
+  --------------------------------
+  Features:
+  - Luxury lodge UI
+  - Dashboard
+  - Task management
+  - Technician assignment
+  - Contractor assignment
+  - Priority tracking
+  - Photo uploads
+  - Voice recording
+  - Local persistence
+  - Offline support
+  - Weekly reports
+  - Search & filters
+  - Mobile optimized
+  - PWA-ready structure
+*/
 
-  const [tasks, setTasks] = useState([
-    {
-      lodge: "River Lodge",
-      title: "Generator Fuel Leak",
-      status: "In Progress",
-      contractor: "Japie",
-    },
-    {
-      lodge: "Leadwood Lodge",
-      title: "Cold Room Fault",
-      status: "Waiting on Parts",
-      contractor: "Len Nel",
-    },
-  ]);
+const lodges = [
+  "River Lodge",
+  "Leadwood Lodge",
+  "Tree Lodge",
+  "Safari Lodge",
+];
 
-  const [newTask, setNewTask] = useState("");
-  const [newLodge, setNewLodge] = useState("River Lodge");
+const technicians = [
+  "Moshapo",
+  "Richard",
+  "Simon",
+  "Tebogo",
+];
 
-  function addTask() {
+const contractors = [
+  "AquaTech",
+  "Fire Systems SA",
+  "CoolTech Aircon",
+  "Bushveld Electrical",
+];
 
-    if (!newTask) return;
+const priorities = ["Low", "Medium", "High", "Urgent"];
 
-    const task = {
-      lodge: newLodge,
-      title: newTask,
-      status: "Reported",
-      contractor: "Unassigned",
+const statuses = [
+  "Pending",
+  "In Progress",
+  "Waiting Contractor",
+  "Completed",
+];
+
+export default function DuliniMaintenanceOps() {
+  const [tasks, setTasks] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filterStatus, setFilterStatus] = useState("All");
+
+  const [recording, setRecording] = useState(false);
+  const mediaRecorder = useRef(null);
+  const chunks = useRef([]);
+
+  const [form, setForm] = useState({
+    title: "",
+    lodge: lodges[0],
+    technician: technicians[0],
+    contractor: "",
+    priority: "Medium",
+    status: "Pending",
+    due: "",
+    notes: "",
+    images: [],
+    voiceNote: null,
+  });
+
+  useEffect(() => {
+    const saved = localStorage.getItem("dulini_tasks");
+
+    if (saved) {
+      setTasks(JSON.parse(saved));
+    } else {
+      const demo = [
+        {
+          id: 1,
+          title: "Replace Pool Pump Motor",
+          lodge: "River Lodge",
+          technician: "Moshapo",
+          contractor: "AquaTech",
+          priority: "Urgent",
+          status: "In Progress",
+          due: "2026-05-20",
+          notes: "Main pool pump seized.",
+          images: [],
+        },
+        {
+          id: 2,
+          title: "Hydrant Pressure Test",
+          lodge: "Leadwood Lodge",
+          technician: "Richard",
+          contractor: "Fire Systems SA",
+          priority: "High",
+          status: "Pending",
+          due: "2026-05-22",
+          notes: "Monthly compliance test.",
+          images: [],
+        },
+      ];
+
+      setTasks(demo);
+      localStorage.setItem("dulini_tasks", JSON.stringify(demo));
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("dulini_tasks", JSON.stringify(tasks));
+  }, [tasks]);
+
+  const stats = useMemo(() => {
+    return {
+      total: tasks.length,
+      completed: tasks.filter((t) => t.status === "Completed").length,
+      urgent: tasks.filter((t) => t.priority === "Urgent").length,
+      progress: tasks.filter((t) => t.status === "In Progress").length,
+    };
+  }, [tasks]);
+
+  const filteredTasks = tasks.filter((task) => {
+    const matchesSearch =
+      task.title.toLowerCase().includes(search.toLowerCase()) ||
+      task.lodge.toLowerCase().includes(search.toLowerCase());
+
+    const matchesFilter =
+      filterStatus === "All" || task.status === filterStatus;
+
+    return matchesSearch && matchesFilter;
+  });
+
+  const handleAddTask = () => {
+    const newTask = {
+      ...form,
+      id: Date.now(),
     };
 
-    setTasks([task, ...tasks]);
+    setTasks([newTask, ...tasks]);
 
-    setNewTask("");
-  }
+    setForm({
+      title: "",
+      lodge: lodges[0],
+      technician: technicians[0],
+      contractor: "",
+      priority: "Medium",
+      status: "Pending",
+      due: "",
+      notes: "",
+      images: [],
+      voiceNote: null,
+    });
 
-  function completeTask(index) {
+    setShowForm(false);
+  };
 
-    const updatedTasks = [...tasks];
+  const deleteTask = (id) => {
+    setTasks(tasks.filter((t) => t.id !== id));
+  };
 
-    updatedTasks[index].status = "Completed";
+  const completeTask = (id) => {
+    setTasks(
+      tasks.map((task) =>
+        task.id === id
+          ? {
+              ...task,
+              status: "Completed",
+            }
+          : task
+      )
+    );
+  };
 
-    setTasks(updatedTasks);
-  }
+  const uploadImages = (e) => {
+    const files = Array.from(e.target.files);
 
-  function deleteTask(index) {
+    const imageUrls = files.map((file) => URL.createObjectURL(file));
 
-    const updatedTasks = tasks.filter((_, i) => i !== index);
+    setForm({
+      ...form,
+      images: imageUrls,
+    });
+  };
 
-    setTasks(updatedTasks);
-  }
+  const startRecording = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+    });
+
+    mediaRecorder.current = new MediaRecorder(stream);
+
+    mediaRecorder.current.ondataavailable = (e) => {
+      chunks.current.push(e.data);
+    };
+
+    mediaRecorder.current.onstop = () => {
+      const blob = new Blob(chunks.current, {
+        type: "audio/webm",
+      });
+
+      const audioUrl = URL.createObjectURL(blob);
+
+      setForm((prev) => ({
+        ...prev,
+        voiceNote: audioUrl,
+      }));
+
+      chunks.current = [];
+    };
+
+    mediaRecorder.current.start();
+    setRecording(true);
+  };
+
+  const stopRecording = () => {
+    mediaRecorder.current.stop();
+    setRecording(false);
+  };
+
+  const generateReport = () => {
+    const report = tasks
+      .map(
+        (t) =>
+          `${t.title} | ${t.lodge} | ${t.priority} | ${t.status}`
+      )
+      .join("\n");
+
+    const blob = new Blob([report], {
+      type: "text/plain",
+    });
+
+    const link = document.createElement("a");
+
+    link.href = URL.createObjectURL(blob);
+
+    link.download = "dulini-weekly-report.txt";
+
+    link.click();
+  };
+
+  const priorityColor = (priority) => {
+    switch (priority) {
+      case "Urgent":
+        return "bg-red-500";
+      case "High":
+        return "bg-orange-500";
+      case "Medium":
+        return "bg-yellow-500";
+      default:
+        return "bg-green-500";
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-[#0f1720] text-white">
+    <div className="min-h-screen bg-black text-white p-4 md:p-6">
+      <div className="max-w-7xl mx-auto">
 
-      <div className="flex">
+        {/* HEADER */}
 
-        {/* SIDEBAR */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
 
-        <aside className="hidden lg:flex flex-col w-72 bg-[#111827] min-h-screen border-r border-slate-800 p-6">
-
-          <div className="mb-10">
-
-            <h1 className="text-3xl font-bold text-amber-400">
-              DULINI
+          <div>
+            <h1 className="text-3xl font-bold tracking-wide">
+              Dulini Maintenance Ops
             </h1>
 
-            <p className="text-slate-400 mt-1 text-sm">
-              Maintenance Operations Center
+            <p className="text-zinc-400 mt-1">
+              Luxury Lodge Operations Platform
             </p>
-
           </div>
 
-          <nav className="space-y-3">
+          <div className="flex gap-3 flex-wrap">
 
-            <button className="w-full text-left bg-amber-500 text-black font-semibold px-4 py-3 rounded-2xl">
-              Dashboard
+            <button
+              onClick={() => setShowForm(!showForm)}
+              className="bg-amber-500 hover:bg-amber-400 text-black px-4 py-3 rounded-2xl flex items-center gap-2 font-semibold"
+            >
+              <Plus size={18} />
+              New Task
             </button>
 
-            <button className="w-full text-left bg-slate-800 hover:bg-slate-700 px-4 py-3 rounded-2xl">
-              Urgent Issues
+            <button
+              onClick={generateReport}
+              className="bg-zinc-800 hover:bg-zinc-700 px-4 py-3 rounded-2xl flex items-center gap-2"
+            >
+              <FileText size={18} />
+              Weekly Report
             </button>
-
-            <button className="w-full text-left bg-slate-800 hover:bg-slate-700 px-4 py-3 rounded-2xl">
-              Contractors
-            </button>
-
-            <button className="w-full text-left bg-slate-800 hover:bg-slate-700 px-4 py-3 rounded-2xl">
-              Reports
-            </button>
-
-          </nav>
-
-          <div className="mt-auto bg-slate-900 rounded-3xl p-5 border border-slate-700">
-
-            <p className="text-slate-400 text-sm mb-2">
-              Operations Health
-            </p>
-
-            <h2 className="text-5xl font-bold text-green-400">
-              84%
-            </h2>
-
-            <p className="text-slate-500 text-sm mt-2">
-              Lodge systems operational
-            </p>
-
           </div>
+        </div>
 
-        </aside>
+        {/* STATS */}
 
-        {/* MAIN CONTENT */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
 
-        <main className="flex-1 p-4 md:p-8">
+          <StatCard
+            icon={<ClipboardCheck />}
+            label="Total Tasks"
+            value={stats.total}
+          />
 
-          {/* HEADER */}
+          <StatCard
+            icon={<CheckCircle2 />}
+            label="Completed"
+            value={stats.completed}
+          />
 
-          <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-8">
+          <StatCard
+            icon={<AlertTriangle />}
+            label="Urgent"
+            value={stats.urgent}
+          />
 
-            <div>
+          <StatCard
+            icon={<Clock3 />}
+            label="In Progress"
+            value={stats.progress}
+          />
+        </div>
 
-              <h1 className="text-4xl md:text-5xl font-bold mb-2">
-                Maintenance Operations Center
-              </h1>
+        {/* SEARCH */}
 
-              <p className="text-slate-400 text-lg">
-                River Lodge • Leadwood Lodge • Moya Lodge
-              </p>
+        <div className="bg-zinc-900 rounded-3xl p-4 mb-6 border border-zinc-800">
 
-            </div>
+          <div className="flex flex-col md:flex-row gap-3">
 
-            <div className="flex gap-3 flex-wrap">
+            <div className="flex-1 relative">
 
-              <button className="bg-red-600 hover:bg-red-700 px-5 py-4 rounded-2xl font-semibold text-lg">
-                + Report Issue
-              </button>
-
-              <button className="bg-amber-500 hover:bg-amber-400 text-black px-5 py-4 rounded-2xl font-semibold text-lg">
-                Generate Handover
-              </button>
-
-            </div>
-
-          </div>
-
-          {/* ADD TASK */}
-
-          <div className="bg-[#111827] rounded-3xl border border-slate-800 p-6 shadow-2xl mb-8">
-
-            <h2 className="text-2xl font-bold mb-6">
-              Report Maintenance Issue
-            </h2>
-
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-
-              <select
-                value={newLodge}
-                onChange={(e) => setNewLodge(e.target.value)}
-                className="bg-[#1e293b] border border-slate-700 rounded-2xl p-4"
-              >
-                <option>River Lodge</option>
-                <option>Leadwood Lodge</option>
-                <option>Moya Lodge</option>
-              </select>
+              <Search
+                className="absolute left-3 top-3 text-zinc-500"
+                size={18}
+              />
 
               <input
                 type="text"
-                placeholder="Enter maintenance issue..."
-                value={newTask}
-                onChange={(e) => setNewTask(e.target.value)}
-                className="bg-[#1e293b] border border-slate-700 rounded-2xl p-4 lg:col-span-2"
+                placeholder="Search tasks..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full bg-zinc-800 rounded-2xl py-3 pl-10 pr-4 outline-none"
+              />
+            </div>
+
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="bg-zinc-800 rounded-2xl px-4 py-3 outline-none"
+            >
+              <option>All</option>
+              {statuses.map((s) => (
+                <option key={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* FORM */}
+
+        {showForm && (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 mb-6">
+
+            <h2 className="text-xl font-semibold mb-4">
+              Create Maintenance Task
+            </h2>
+
+            <div className="grid md:grid-cols-2 gap-4">
+
+              <input
+                type="text"
+                placeholder="Task title"
+                value={form.title}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    title: e.target.value,
+                  })
+                }
+                className="bg-zinc-800 rounded-2xl p-3 outline-none"
               />
 
-              <button
-                onClick={addTask}
-                className="bg-amber-500 hover:bg-amber-400 text-black font-bold rounded-2xl p-4"
+              <select
+                value={form.lodge}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    lodge: e.target.value,
+                  })
+                }
+                className="bg-zinc-800 rounded-2xl p-3 outline-none"
               >
-                Add Task
-              </button>
+                {lodges.map((l) => (
+                  <option key={l}>{l}</option>
+                ))}
+              </select>
 
-            </div>
+              <select
+                value={form.technician}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    technician: e.target.value,
+                  })
+                }
+                className="bg-zinc-800 rounded-2xl p-3 outline-none"
+              >
+                {technicians.map((t) => (
+                  <option key={t}>{t}</option>
+                ))}
+              </select>
 
-          </div>
+              <select
+                value={form.contractor}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    contractor: e.target.value,
+                  })
+                }
+                className="bg-zinc-800 rounded-2xl p-3 outline-none"
+              >
+                <option value="">No Contractor</option>
 
-          {/* STATS */}
+                {contractors.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </select>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
+              <select
+                value={form.priority}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    priority: e.target.value,
+                  })
+                }
+                className="bg-zinc-800 rounded-2xl p-3 outline-none"
+              >
+                {priorities.map((p) => (
+                  <option key={p}>{p}</option>
+                ))}
+              </select>
 
-            <div className="bg-[#1e293b] rounded-3xl p-6 border border-slate-700">
+              <input
+                type="date"
+                value={form.due}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    due: e.target.value,
+                  })
+                }
+                className="bg-zinc-800 rounded-2xl p-3 outline-none"
+              />
 
-              <p className="text-slate-400 mb-2">
-                Total Tasks
-              </p>
+              <textarea
+                placeholder="Notes"
+                value={form.notes}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    notes: e.target.value,
+                  })
+                }
+                className="bg-zinc-800 rounded-2xl p-3 outline-none md:col-span-2 min-h-[120px]"
+              />
 
-              <h2 className="text-5xl font-bold text-white">
-                {tasks.length}
-              </h2>
+              {/* IMAGE */}
 
-            </div>
+              <div className="bg-zinc-800 rounded-2xl p-4">
 
-            <div className="bg-[#1e293b] rounded-3xl p-6 border border-slate-700">
+                <label className="flex items-center gap-2 mb-2">
+                  <Camera size={18} />
+                  Upload Photos
+                </label>
 
-              <p className="text-slate-400 mb-2">
-                Completed
-              </p>
-
-              <h2 className="text-5xl font-bold text-green-400">
-                {tasks.filter(task => task.status === "Completed").length}
-              </h2>
-
-            </div>
-
-            <div className="bg-[#1e293b] rounded-3xl p-6 border border-slate-700">
-
-              <p className="text-slate-400 mb-2">
-                Active Issues
-              </p>
-
-              <h2 className="text-5xl font-bold text-red-400">
-                {tasks.filter(task => task.status !== "Completed").length}
-              </h2>
-
-            </div>
-
-            <div className="bg-[#1e293b] rounded-3xl p-6 border border-slate-700">
-
-              <p className="text-slate-400 mb-2">
-                Contractors
-              </p>
-
-              <h2 className="text-5xl font-bold text-amber-400">
-                4
-              </h2>
-
-            </div>
-
-          </div>
-
-          {/* TASK BOARD */}
-
-          <div className="bg-[#111827] rounded-3xl border border-slate-800 p-6 shadow-2xl">
-
-            <div className="flex items-center justify-between mb-6">
-
-              <h2 className="text-2xl font-bold">
-                Operations Task Board
-              </h2>
-
-              <div className="bg-red-600 px-4 py-2 rounded-xl font-semibold">
-                Live Maintenance Issues
+                <input
+                  type="file"
+                  multiple
+                  onChange={uploadImages}
+                />
               </div>
 
+              {/* VOICE */}
+
+              <div className="bg-zinc-800 rounded-2xl p-4">
+
+                <label className="flex items-center gap-2 mb-3">
+                  <Mic size={18} />
+                  Voice Notes
+                </label>
+
+                {!recording ? (
+                  <button
+                    onClick={startRecording}
+                    className="bg-red-500 px-4 py-2 rounded-xl"
+                  >
+                    Start Recording
+                  </button>
+                ) : (
+                  <button
+                    onClick={stopRecording}
+                    className="bg-zinc-600 px-4 py-2 rounded-xl"
+                  >
+                    Stop Recording
+                  </button>
+                )}
+
+                {form.voiceNote && (
+                  <audio
+                    controls
+                    src={form.voiceNote}
+                    className="mt-3 w-full"
+                  />
+                )}
+              </div>
             </div>
 
-            <div className="space-y-5">
+            <button
+              onClick={handleAddTask}
+              className="mt-5 bg-amber-500 hover:bg-amber-400 text-black px-5 py-3 rounded-2xl font-semibold"
+            >
+              Save Task
+            </button>
+          </div>
+        )}
 
-              {tasks.map((task, index) => (
+        {/* TASKS */}
 
-                <div
-                  key={index}
-                  className={`rounded-3xl p-6 border ${
-                    task.status === "Completed"
-                      ? "bg-green-900/20 border-green-500/20"
-                      : "bg-[#1e293b] border-red-500/20"
-                  }`}
-                >
+        <div className="space-y-4">
 
-                  <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-5">
+          {filteredTasks.map((task) => (
+            <div
+              key={task.id}
+              className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5"
+            >
+              <div className="flex flex-col md:flex-row md:justify-between gap-4">
 
-                    <div className="flex-1">
+                <div className="flex-1">
 
-                      <div className="flex flex-wrap items-center gap-3 mb-4">
+                  <div className="flex items-center gap-3 mb-3">
 
-                        <span
-                          className={`px-4 py-1 rounded-full text-sm font-bold ${
-                            task.status === "Completed"
-                              ? "bg-green-600"
-                              : "bg-red-600"
-                          }`}
-                        >
-                          {task.status}
-                        </span>
+                    <div
+                      className={`w-3 h-3 rounded-full ${priorityColor(
+                        task.priority
+                      )}`}
+                    />
 
-                        <span className="text-slate-400 text-sm">
-                          {task.lodge}
-                        </span>
-
-                      </div>
-
-                      <h3 className="text-2xl font-bold mb-2">
-                        {task.title}
-                      </h3>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
-
-                        <div>
-
-                          <p className="text-slate-500 text-sm">
-                            Contractor
-                          </p>
-
-                          <p className="font-semibold">
-                            {task.contractor}
-                          </p>
-
-                        </div>
-
-                        <div>
-
-                          <p className="text-slate-500 text-sm">
-                            Status
-                          </p>
-
-                          <p className="font-semibold">
-                            {task.status}
-                          </p>
-
-                        </div>
-
-                        <div>
-
-                          <p className="text-slate-500 text-sm">
-                            Lodge
-                          </p>
-
-                          <p className="font-semibold">
-                            {task.lodge}
-                          </p>
-
-                        </div>
-
-                      </div>
-
-                    </div>
-
-                    <div className="flex flex-col gap-3 min-w-[220px]">
-
-                      {task.status !== "Completed" && (
-
-                        <button
-                          onClick={() => completeTask(index)}
-                          className="bg-green-600 hover:bg-green-700 px-5 py-3 rounded-2xl font-semibold"
-                        >
-                          Mark Completed
-                        </button>
-
-                      )}
-
-                      <button
-                        onClick={() => deleteTask(index)}
-                        className="bg-red-600 hover:bg-red-700 px-5 py-3 rounded-2xl font-semibold"
-                      >
-                        Delete Task
-                      </button>
-
-                    </div>
-
+                    <h3 className="text-xl font-semibold">
+                      {task.title}
+                    </h3>
                   </div>
 
+                  <div className="grid md:grid-cols-2 gap-3 text-sm text-zinc-300">
+
+                    <div className="flex items-center gap-2">
+                      <Building2 size={16} />
+                      {task.lodge}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <User size={16} />
+                      {task.technician}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Wrench size={16} />
+                      {task.contractor || "Internal Team"}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Clock3 size={16} />
+                      Due: {task.due || "Not Set"}
+                    </div>
+                  </div>
+
+                  <p className="text-zinc-400 mt-4">
+                    {task.notes}
+                  </p>
+
+                  {/* PHOTOS */}
+
+                  {task.images?.length > 0 && (
+                    <div className="flex gap-3 mt-4 overflow-x-auto">
+
+                      {task.images.map((img, idx) => (
+                        <img
+                          key={idx}
+                          src={img}
+                          alt=""
+                          className="w-24 h-24 object-cover rounded-2xl"
+                        />
+                      ))}
+                    </div>
+                  )}
+
+                  {/* AUDIO */}
+
+                  {task.voiceNote && (
+                    <audio
+                      controls
+                      src={task.voiceNote}
+                      className="mt-4 w-full"
+                    />
+                  )}
                 </div>
 
-              ))}
+                {/* ACTIONS */}
 
+                <div className="flex md:flex-col gap-3">
+
+                  <div className="bg-zinc-800 px-4 py-2 rounded-2xl text-center">
+                    {task.status}
+                  </div>
+
+                  <button
+                    onClick={() => completeTask(task.id)}
+                    className="bg-green-600 hover:bg-green-500 px-4 py-2 rounded-2xl"
+                  >
+                    Complete
+                  </button>
+
+                  <button
+                    onClick={() => deleteTask(task.id)}
+                    className="bg-red-600 hover:bg-red-500 px-4 py-2 rounded-2xl"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
             </div>
+          ))}
 
-          </div>
+          {filteredTasks.length === 0 && (
+            <div className="text-center text-zinc-500 py-20">
+              No maintenance tasks found.
+            </div>
+          )}
+        </div>
 
-        </main>
+        {/* FOOTER */}
 
+        <div className="mt-10 text-center text-zinc-500 text-sm">
+          Dulini Luxury Lodge Maintenance Operations System
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ icon, label, value }) {
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-zinc-400">{label}</div>
+        <div className="text-amber-400">{icon}</div>
       </div>
 
+      <div className="text-3xl font-bold">
+        {value}
+      </div>
     </div>
   );
 }
